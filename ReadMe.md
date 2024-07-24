@@ -4,7 +4,7 @@ This project simulates fungal growth using a grid-based visualization and genera
 
 ## Project Files
 
-- `fungal_life_simulation.js`: The main JavaScript file that contains the code for the fungal growth simulation.
+- `fungalLife.js`: The main JavaScript file that contains the code for the fungal growth simulation.
 
 ## Setup Instructions
 
@@ -15,7 +15,7 @@ This project simulates fungal growth using a grid-based visualization and genera
 
 2. **Run the Simulation**: Execute the following command to run the simulation and generate the GIF:
     ```sh
-    node fungal_life_simulation.js
+    node fungalLife.js
     ```
 
 ## Code Overview
@@ -65,7 +65,7 @@ This project simulates fungal growth using a grid-based visualization and genera
 
 To run the simulation, use:
 ```sh
-node fungal_life_simulation.js
+node fungalLife.js.js
 ```
 
 ## Notes
