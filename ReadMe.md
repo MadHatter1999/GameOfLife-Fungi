@@ -65,7 +65,7 @@ This project simulates fungal growth using a grid-based visualization and genera
 
 To run the simulation, use:
 ```sh
-node fungalLife.js.js
+node fungalLife.js
 ```
 
 ## Notes
