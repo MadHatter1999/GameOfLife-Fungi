@@ -3,7 +3,7 @@ const GIFEncoder = require('gifencoder');
 const fs = require('fs');
 
 // Define the grid size and cell size for visualization
-const gridSize = 200;
+const gridSize = 400;
 const cellSize = 4;
 
 // Define cell states
@@ -101,4 +101,4 @@ function simulate(iterations) {
 }
 
 // Run the simulation
-simulate(4000);
+simulate(5000);
