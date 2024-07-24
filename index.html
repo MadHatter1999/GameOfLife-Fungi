@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fungal Growth Simulation</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <h1>Fungal Growth Simulation</h1>
+    <canvas id="simulationCanvas"></canvas>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+
+        socket.on('init', (data) => {
+            canvas.width = data.gridSize * data.cellSize;
+            canvas.height = data.gridSize * data.cellSize;
+        });
+
+        socket.on('frame', (imgData) => {
+            const img = new Image();
+            img.src = imgData;
+            img.onload = () => {
+                ctx.drawImage(img, 0, 0);
+            };
+        });
+    </script>
+</body>
+</html>
