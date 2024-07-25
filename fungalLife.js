@@ -17,100 +17,122 @@ const DECAYING = 5;
 // Define decay time for dead cells
 const DECAY_TIME = 50;
 
-// Initialize the grid, age tracker, and decay tracker
-let grid = Array.from({ length: gridSize }, () => Array(gridSize).fill(EMPTY));
-let age = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
-let decayTime = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
+// FungusCell class to encapsulate the properties and behaviors of each cell
+class FungusCell {
+    constructor(state = EMPTY, age = 0, decayTime = 0, strain = '') {
+        this.state = state;
+        this.age = age;
+        this.decayTime = decayTime;
+        this.strain = strain; // Add strain to differentiate between competing fungi
+    }
 
-// Initialize with some spores
-const initialSpores = [
-    [Math.floor(gridSize / 2), Math.floor(gridSize / 2)],
-];
-
-initialSpores.forEach(([x, y]) => {
-    grid[x][y] = SPORE;
-});
-
-// Function to count neighboring hyphae
-function countNeighbors(grid, x, y) {
-    let directions = [
-        [0, 1], [1, 0], [0, -1], [-1, 0],
-        [-1, -1], [-1, 1], [1, -1], [1, 1],
-    ];
-    return directions.reduce((count, [dx, dy]) => {
-        let nx = (x + dx + gridSize) % gridSize;
-        let ny = (y + dy + gridSize) % gridSize;
-        return count + (grid[nx][ny] === HYPHAE ? 1 : 0);
-    }, 0);
-}
-
-// Function to update the grid based on fungal growth and decay rules
-function updateGrid(grid, age, decayTime) {
-    let newGrid = grid.map(arr => arr.slice());
-    let newAge = age.map(arr => arr.slice());
-    let newDecayTime = decayTime.map(arr => arr.slice());
-
-    for (let x = 0; x < gridSize; x++) {
-        for (let y = 0; y < gridSize; y++) {
-            if (grid[x][y] === SPORE) {
+    update(grid, x, y) {
+        switch (this.state) {
+            case SPORE:
                 if (Math.random() < 0.1) {
-                    newGrid[x][y] = TIP;
-                    newAge[x][y] = 0;
+                    this.state = TIP;
+                    this.age = 0;
                 }
-            } else if (grid[x][y] === TIP) {
-                newGrid[x][y] = HYPHAE;
-                newAge[x][y]++;
-                let directions = [
-                    [0, 1], [1, 0], [0, -1], [-1, 0],
-                    [-1, -1], [-1, 1], [1, -1], [1, 1],
-                ];
-                let direction = directions[Math.floor(Math.random() * directions.length)];
-                let [dx, dy] = direction;
-                let nx = (x + dx + gridSize) % gridSize;
-                let ny = (y + dy + gridSize) % gridSize;
-                if (newGrid[nx][ny] === EMPTY) {
-                    newGrid[nx][ny] = TIP;
-                    newAge[nx][ny] = 0;
+                break;
+            case TIP:
+                this.state = HYPHAE;
+                this.age++;
+                this.spread(grid, x, y);
+                break;
+            case HYPHAE:
+                this.age++;
+                if (Math.random() < 0.005 || this.age > 120 || this.countNeighbors(grid, x, y) > 4) {
+                    this.state = DECAYING;
+                    this.decayTime = DECAY_TIME;
+                } else if (Math.random() < 0.005) {
+                    this.state = SPORE;
+                    this.age = 0;
                 }
-            } else if (grid[x][y] === HYPHAE) {
-                newAge[x][y]++;
-                if (Math.random() < 0.01 || newAge[x][y] > 100 || countNeighbors(grid, x, y) > 4) {
-                    newGrid[x][y] = DECAYING;
-                    newDecayTime[x][y] = DECAY_TIME;
-                } else if (Math.random() < 0.01) {
-                    newGrid[x][y] = SPORE;
-                    newAge[x][y] = 0;
+                break;
+            case DECAYING:
+                this.decayTime--;
+                if (this.decayTime <= 0) {
+                    this.state = EMPTY;
+                    this.age = 0;
+                    this.decayTime = 0;
                 }
-            } else if (grid[x][y] === DECAYING) {
-                newDecayTime[x][y]--;
-                if (newDecayTime[x][y] <= 0) {
-                    newGrid[x][y] = EMPTY;
-                    newAge[x][y] = 0;
-                    newDecayTime[x][y] = 0;
-                }
-            }
+                break;
         }
     }
 
-    return [newGrid, newAge, newDecayTime];
+    spread(grid, x, y) {
+        let directions = [
+            [0, 1], [1, 0], [0, -1], [-1, 0],
+            [-1, -1], [-1, 1], [1, -1], [1, 1],
+        ];
+        let direction = directions[Math.floor(Math.random() * directions.length)];
+        let [dx, dy] = direction;
+        let nx = (x + dx + gridSize) % gridSize;
+        let ny = (y + dy + gridSize) % gridSize;
+        if (grid[nx][ny].state === EMPTY) {
+            grid[nx][ny] = new FungusCell(TIP, 0, 0, this.strain);
+        }
+    }
+
+    countNeighbors(grid, x, y) {
+        let directions = [
+            [0, 1], [1, 0], [0, -1], [-1, 0],
+            [-1, -1], [-1, 1], [1, -1], [1, 1],
+        ];
+        return directions.reduce((count, [dx, dy]) => {
+            let nx = (x + dx + gridSize) % gridSize;
+            let ny = (y + dy + gridSize) % gridSize;
+            return count + (grid[nx][ny].state === HYPHAE ? 1 : 0);
+        }, 0);
+    }
+}
+
+// Initialize the grid with FungusCell objects
+let grid = Array.from({ length: gridSize }, () => Array.from({ length: gridSize }, () => new FungusCell()));
+
+// Initialize with some spores for two strains
+const initialSpores = [
+    { x: Math.floor(gridSize / 4), y: Math.floor(gridSize / 4), strain: 'Penicillium' },
+    { x: Math.floor(3 * gridSize / 4), y: Math.floor(3 * gridSize / 4), strain: 'Aspergillus' },
+];
+
+initialSpores.forEach(({ x, y, strain }) => {
+    grid[x][y] = new FungusCell(SPORE, 0, 0, strain);
+});
+
+// Function to update the grid based on fungal growth and decay rules
+function updateGrid(grid) {
+    let newGrid = grid.map(row => row.map(cell => new FungusCell(cell.state, cell.age, cell.decayTime, cell.strain)));
+
+    for (let x = 0; x < gridSize; x++) {
+        for (let y = 0; y < gridSize; y++) {
+            newGrid[x][y].update(newGrid, x, y);
+        }
+    }
+
+    return newGrid;
 }
 
 // Function to draw the grid on a canvas
 function drawGrid(grid, ctx) {
     for (let x = 0; x < gridSize; x++) {
         for (let y = 0; y < gridSize; y++) {
-            if (grid[x][y] === EMPTY) {
-                ctx.fillStyle = 'white';
-            } else if (grid[x][y] === HYPHAE) {
-                ctx.fillStyle = 'green';
-            } else if (grid[x][y] === TIP) {
-                ctx.fillStyle = 'darkgreen';
-            } else if (grid[x][y] === SPORE) {
-                ctx.fillStyle = 'brown';
-            } else if (grid[x][y] === DEAD) {
-                ctx.fillStyle = 'black';
-            } else if (grid[x][y] === DECAYING) {
-                ctx.fillStyle = 'grey';
+            switch (grid[x][y].state) {
+                case EMPTY:
+                    ctx.fillStyle = 'white';
+                    break;
+                case HYPHAE:
+                    ctx.fillStyle = grid[x][y].strain === 'Penicillium' ? 'green' : 'brown';
+                    break;
+                case TIP:
+                    ctx.fillStyle = grid[x][y].strain === 'Penicillium' ? 'darkgreen' : 'darkbrown';
+                    break;
+                case SPORE:
+                    ctx.fillStyle = grid[x][y].strain === 'Penicillium' ? 'blue' : 'yellow';
+                    break;
+                case DECAYING:
+                    ctx.fillStyle = 'grey';
+                    break;
             }
             ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
         }
@@ -123,7 +145,7 @@ const ctx = canvas.getContext('2d');
 
 // Create a GIF encoder
 const encoder = new GIFEncoder(gridSize * cellSize, gridSize * cellSize);
-encoder.createReadStream().pipe(fs.createWriteStream('fungal-life-with-decay-time.gif'));
+encoder.createReadStream().pipe(fs.createWriteStream('fungal-life-competing-strains.gif'));
 encoder.start();
 encoder.setRepeat(0); // 0 for repeat, -1 for no-repeat
 encoder.setDelay(100); // frame delay in ms
@@ -132,8 +154,8 @@ encoder.setQuality(10); // image quality. 10 is default
 // Main simulation loop
 function simulate(iterations) {
     for (let i = 0; i < iterations; i++) {
-        console.log('Current Cycle, ', i);
-        [grid, age, decayTime] = updateGrid(grid, age, decayTime);
+        console.log('Current Cycle:', i);
+        grid = updateGrid(grid);
         drawGrid(grid, ctx);
         encoder.addFrame(ctx);
     }
@@ -142,4 +164,4 @@ function simulate(iterations) {
 }
 
 // Run the simulation
-simulate(500);
+simulate(1000);
