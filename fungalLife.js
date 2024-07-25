@@ -17,6 +17,12 @@ const DECAYING = 5;
 // Define decay time for dead cells
 const DECAY_TIME = 50;
 
+// Growth settings
+const SPORE_TO_TIP_PROBABILITY = 0.18;
+const RANDOM_DEATH_PROBABILITY = 0.005;
+const AGE_THRESHOLD = 120;
+const SPREAD_FACTOR = 2;
+
 // FungusCell class to encapsulate the properties and behaviors of each cell
 class FungusCell {
     constructor(state = EMPTY, age = 0, decayTime = 0, strain = '') {
@@ -29,7 +35,7 @@ class FungusCell {
     update(grid, x, y) {
         switch (this.state) {
             case SPORE:
-                if (Math.random() < 0.1) {
+                if (Math.random() < SPORE_TO_TIP_PROBABILITY) {
                     this.state = TIP;
                     this.age = 0;
                 }
@@ -37,14 +43,14 @@ class FungusCell {
             case TIP:
                 this.state = HYPHAE;
                 this.age++;
-                this.spread(grid, x, y);
+                this.spread(grid, x, y, SPREAD_FACTOR);
                 break;
             case HYPHAE:
                 this.age++;
-                if (Math.random() < 0.005 || this.age > 120 || this.countNeighbors(grid, x, y) > 4) {
+                if (Math.random() < RANDOM_DEATH_PROBABILITY || this.age > AGE_THRESHOLD || this.countNeighbors(grid, x, y) > 4) {
                     this.state = DECAYING;
                     this.decayTime = DECAY_TIME;
-                } else if (Math.random() < 0.005) {
+                } else if (Math.random() < RANDOM_DEATH_PROBABILITY) {
                     this.state = SPORE;
                     this.age = 0;
                 }
@@ -60,17 +66,19 @@ class FungusCell {
         }
     }
 
-    spread(grid, x, y) {
+    spread(grid, x, y, spreadFactor) {
         let directions = [
             [0, 1], [1, 0], [0, -1], [-1, 0],
             [-1, -1], [-1, 1], [1, -1], [1, 1],
         ];
-        let direction = directions[Math.floor(Math.random() * directions.length)];
-        let [dx, dy] = direction;
-        let nx = (x + dx + gridSize) % gridSize;
-        let ny = (y + dy + gridSize) % gridSize;
-        if (grid[nx][ny].state === EMPTY) {
-            grid[nx][ny] = new FungusCell(TIP, 0, 0, this.strain);
+        for (let i = 0; i < spreadFactor; i++) {
+            let direction = directions[Math.floor(Math.random() * directions.length)];
+            let [dx, dy] = direction;
+            let nx = (x + dx + gridSize) % gridSize;
+            let ny = (y + dy + gridSize) % gridSize;
+            if (grid[nx][ny].state === EMPTY) {
+                grid[nx][ny] = new FungusCell(TIP, 0, 0, this.strain);
+            }
         }
     }
 
@@ -164,4 +172,4 @@ function simulate(iterations) {
 }
 
 // Run the simulation
-simulate(1000);
+simulate(500);
