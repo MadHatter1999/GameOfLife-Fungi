@@ -31,15 +31,20 @@ const TUMOR_DECAY_PROBABILITY = 0.05;
 const TUMOR_SPREAD_PROBABILITY = 0.05;
 const TUMOR_DECAY_TIME = 50; // Duration of tumor decay
 
+// Synaptic Plasticity settings
+const LEARNING_RATE = 0.01;
+const DECAY_RATE = 0.001;
+
 // NeuronCell class to encapsulate the properties and behaviors of each cell
 class NeuronCell {
-    constructor(state = INACTIVE, activityLevel = 0, refractoryTime = 0, neuronType = 'excitatory', synapticStrength = 1, tumorDecayTime = 0) {
+    constructor(state = INACTIVE, activityLevel = 0, refractoryTime = 0, neuronType = 'excitatory', synapticStrength = 1, tumorDecayTime = 0, connections = []) {
         this.state = state;
         this.activityLevel = activityLevel;
         this.refractoryTime = refractoryTime;
         this.neuronType = neuronType; // 'excitatory' or 'inhibitory'
         this.synapticStrength = synapticStrength;
         this.tumorDecayTime = tumorDecayTime;
+        this.connections = connections; // Array of connected neuron positions
     }
 
     update(grid, x, y) {
@@ -54,7 +59,7 @@ class NeuronCell {
                 break;
             case ACTIVE:
                 this.activityLevel++;
-                this.connect(grid, x, y, CONNECTION_FACTOR);
+                this.propagateSignal(grid, x, y);
                 if (Math.random() < DEACTIVATION_PROBABILITY || this.activityLevel > REFRACTORY_THRESHOLD) {
                     this.state = REFRACTORY;
                     this.refractoryTime = REFRACTORY_PERIOD;
@@ -102,20 +107,29 @@ class NeuronCell {
         });
     }
 
-    connect(grid, x, y, connectionFactor) {
-        let directions = [
-            [0, 1], [1, 0], [0, -1], [-1, 0],
-            [-1, -1], [-1, 1], [1, -1], [1, 1],
-        ];
-        for (let i = 0; i < connectionFactor; i++) {
-            let direction = directions[Math.floor(Math.random() * directions.length)];
-            let [dx, dy] = direction;
+    propagateSignal(grid, x, y) {
+        if (this.state === TUMOR_INITIATION || this.state === TUMOR_GROWTH || this.state === TUMOR_DECAY) {
+            return; // Do not propagate signals from tumor-affected neurons
+        }
+
+        // Strengthen connections (Hebbian learning)
+        this.connections.forEach(([dx, dy]) => {
             let nx = (x + dx + gridSize) % gridSize;
             let ny = (y + dy + gridSize) % gridSize;
-            if (grid[nx][ny].state === INACTIVE) {
-                grid[nx][ny] = new NeuronCell(ACTIVE, 0, 0, this.neuronType, this.synapticStrength);
+            grid[nx][ny].synapticStrength += LEARNING_RATE;
+        });
+
+        // Propagate signals to connected neurons
+        this.connections.forEach(([dx, dy]) => {
+            let nx = (x + dx + gridSize) % gridSize;
+            let ny = (y + dy + gridSize) % gridSize;
+            if (grid[nx][ny].state === INACTIVE && Math.random() < this.synapticStrength) {
+                grid[nx][ny] = new NeuronCell(ACTIVE, 0, 0, grid[nx][ny].neuronType, grid[nx][ny].synapticStrength);
             }
-        }
+        });
+
+        // Decay synaptic strengths (synaptic plasticity)
+        this.synapticStrength = Math.max(0, this.synapticStrength - DECAY_RATE);
     }
 }
 
@@ -126,15 +140,22 @@ let grid = Array.from({ length: gridSize }, () => Array.from({ length: gridSize 
 const initialNeurons = [
     { x: Math.floor(gridSize / 4), y: Math.floor(gridSize / 4), type: 'excitatory' },
     { x: Math.floor(3 * gridSize / 4), y: Math.floor(3 * gridSize / 4), type: 'inhibitory' },
+    // Add more initial neurons to create a balanced and distributed setup
+    ...Array.from({ length: 20 }, () => ({
+        x: Math.floor(Math.random() * gridSize),
+        y: Math.floor(Math.random() * gridSize),
+        type: Math.random() < 0.5 ? 'excitatory' : 'inhibitory',
+        connections: Array.from({ length: 4 }, () => [Math.floor(Math.random() * 3) - 1, Math.floor(Math.random() * 3) - 1]) // Random initial connections
+    }))
 ];
 
-initialNeurons.forEach(({ x, y, type }) => {
-    grid[x][y] = new NeuronCell(ACTIVE, 0, 0, type, Math.random());
+initialNeurons.forEach(({ x, y, type, connections }) => {
+    grid[x][y] = new NeuronCell(ACTIVE, 0, 0, type, Math.random(), 0, connections);
 });
 
 // Function to update the grid based on neuronal activity rules
 function updateGrid(grid) {
-    let newGrid = grid.map(row => row.map(cell => new NeuronCell(cell.state, cell.activityLevel, cell.refractoryTime, cell.neuronType, cell.synapticStrength, cell.tumorDecayTime)));
+    let newGrid = grid.map(row => row.map(cell => new NeuronCell(cell.state, cell.activityLevel, cell.refractoryTime, cell.neuronType, cell.synapticStrength, cell.tumorDecayTime, cell.connections)));
 
     for (let x = 0; x < gridSize; x++) {
         for (let y = 0; y < gridSize; y++) {
