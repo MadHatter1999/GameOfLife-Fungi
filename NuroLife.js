@@ -11,9 +11,8 @@ const INACTIVE = 0;
 const ACTIVE = 1;
 const REFRACTORY = 2;
 const INHIBITORY = 3;
-const TUMOR_INITIATION = 4;
-const TUMOR_GROWTH = 5;
-const TUMOR_DECAY = 6;
+const DEMENTIA_START = 4;
+const DEMENTIA_AFFECTED = 5;
 
 // Define refractory period for active cells
 const REFRACTORY_PERIOD = 50;
@@ -24,22 +23,21 @@ const DEACTIVATION_PROBABILITY = 0.01;
 const REFRACTORY_THRESHOLD = 100;
 const CONNECTION_FACTOR = 2;
 
-// Tumor settings
-const TUMOR_INITIATION_PROBABILITY = 0.0001; // Less frequent tumor initiation
-const TUMOR_GROWTH_PROBABILITY = 0.1;
-const TUMOR_DECAY_PROBABILITY = 0.05;
-const TUMOR_SPREAD_PROBABILITY = 0.05;
-const TUMOR_DECAY_TIME = 50; // Duration of tumor decay
+// Dementia settings
+const DEMENTIA_PROBABILITY = 0.001;
+const DEMENTIA_SPREAD_PROBABILITY = 0.1;
+const DEMENTIA_DECAY_PROBABILITY = 0.05;
+const DEMENTIA_DECAY_TIME = 50;
 
 // NeuronCell class to encapsulate the properties and behaviors of each cell
 class NeuronCell {
-    constructor(state = INACTIVE, activityLevel = 0, refractoryTime = 0, neuronType = 'excitatory', synapticStrength = 1, tumorDecayTime = 0) {
+    constructor(state = INACTIVE, activityLevel = 0, refractoryTime = 0, neuronType = 'excitatory', synapticStrength = 1, dementiaDecayTime = 0) {
         this.state = state;
         this.activityLevel = activityLevel;
         this.refractoryTime = refractoryTime;
         this.neuronType = neuronType; // 'excitatory' or 'inhibitory'
         this.synapticStrength = synapticStrength;
-        this.tumorDecayTime = tumorDecayTime;
+        this.dementiaDecayTime = dementiaDecayTime;
     }
 
     update(grid, x, y) {
@@ -48,8 +46,8 @@ class NeuronCell {
                 if (Math.random() < ACTIVATION_PROBABILITY) {
                     this.state = ACTIVE;
                     this.activityLevel = 0;
-                } else if (Math.random() < TUMOR_INITIATION_PROBABILITY) {
-                    this.state = TUMOR_INITIATION;
+                } else if (Math.random() < DEMENTIA_PROBABILITY) {
+                    this.state = DEMENTIA_START;
                 }
                 break;
             case ACTIVE:
@@ -67,28 +65,23 @@ class NeuronCell {
                     this.activityLevel = 0;
                 }
                 break;
-            case TUMOR_INITIATION:
-                if (Math.random() < TUMOR_GROWTH_PROBABILITY) {
-                    this.state = TUMOR_GROWTH;
+            case DEMENTIA_START:
+                this.spreadDementia(grid, x, y);
+                if (Math.random() < DEMENTIA_DECAY_PROBABILITY) {
+                    this.state = DEMENTIA_AFFECTED;
+                    this.dementiaDecayTime = DEMENTIA_DECAY_TIME;
                 }
                 break;
-            case TUMOR_GROWTH:
-                this.spreadTumor(grid, x, y);
-                if (Math.random() < TUMOR_DECAY_PROBABILITY) {
-                    this.state = TUMOR_DECAY;
-                    this.tumorDecayTime = TUMOR_DECAY_TIME;
-                }
-                break;
-            case TUMOR_DECAY:
-                this.tumorDecayTime--;
-                if (this.tumorDecayTime <= 0) {
+            case DEMENTIA_AFFECTED:
+                this.dementiaDecayTime--;
+                if (this.dementiaDecayTime <= 0) {
                     this.state = INACTIVE;
                 }
                 break;
         }
     }
 
-    spreadTumor(grid, x, y) {
+    spreadDementia(grid, x, y) {
         let directions = [
             [0, 1], [1, 0], [0, -1], [-1, 0],
             [-1, -1], [-1, 1], [1, -1], [1, 1],
@@ -96,8 +89,8 @@ class NeuronCell {
         directions.forEach(([dx, dy]) => {
             let nx = (x + dx + gridSize) % gridSize;
             let ny = (y + dy + gridSize) % gridSize;
-            if (grid[nx][ny].state !== TUMOR_GROWTH && Math.random() < TUMOR_SPREAD_PROBABILITY) {
-                grid[nx][ny] = new NeuronCell(TUMOR_INITIATION, 0, 0, this.neuronType, this.synapticStrength);
+            if (grid[nx][ny].state !== DEMENTIA_START && grid[nx][ny].state !== DEMENTIA_AFFECTED && Math.random() < DEMENTIA_SPREAD_PROBABILITY) {
+                grid[nx][ny] = new NeuronCell(DEMENTIA_START, 0, 0, this.neuronType, this.synapticStrength);
             }
         });
     }
@@ -134,7 +127,7 @@ initialNeurons.forEach(({ x, y, type }) => {
 
 // Function to update the grid based on neuronal activity rules
 function updateGrid(grid) {
-    let newGrid = grid.map(row => row.map(cell => new NeuronCell(cell.state, cell.activityLevel, cell.refractoryTime, cell.neuronType, cell.synapticStrength, cell.tumorDecayTime)));
+    let newGrid = grid.map(row => row.map(cell => new NeuronCell(cell.state, cell.activityLevel, cell.refractoryTime, cell.neuronType, cell.synapticStrength, cell.dementiaDecayTime)));
 
     for (let x = 0; x < gridSize; x++) {
         for (let y = 0; y < gridSize; y++) {
@@ -162,13 +155,10 @@ function drawGrid(grid, ctx) {
                 case REFRACTORY:
                     ctx.fillStyle = 'grey';
                     break;
-                case TUMOR_INITIATION:
+                case DEMENTIA_START:
                     ctx.fillStyle = 'yellow';
                     break;
-                case TUMOR_GROWTH:
-                    ctx.fillStyle = 'orange';
-                    break;
-                case TUMOR_DECAY:
+                case DEMENTIA_AFFECTED:
                     ctx.fillStyle = 'brown';
                     break;
             }
@@ -183,7 +173,7 @@ const ctx = canvas.getContext('2d');
 
 // Create a GIF encoder
 const encoder = new GIFEncoder(gridSize * cellSize, gridSize * cellSize);
-encoder.createReadStream().pipe(fs.createWriteStream('neuronal-activity-with-tumor-lifecycle.gif'));
+encoder.createReadStream().pipe(fs.createWriteStream('neuronal-activity-with-dementia.gif'));
 encoder.start();
 encoder.setRepeat(0); // 0 for repeat, -1 for no-repeat
 encoder.setDelay(100); // frame delay in ms
