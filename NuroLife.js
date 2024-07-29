@@ -25,25 +25,36 @@ const REFRACTORY_THRESHOLD = 100;
 const CONNECTION_FACTOR = 2;
 
 // Dementia settings
-const DEMENTIA_PROBABILITY = 0.0007; // Increased initiation probability
-const DEMENTIA_SPREAD_PROBABILITY = 0.002; // Decreased spread probability
+const DEMENTIA_PROBABILITY = 0.007; // Increased initiation probability
+const DEMENTIA_SPREAD_PROBABILITY = 0.02; // Decreased spread probability
 const DEMENTIA_DECAY_PROBABILITY = 0.1; // Maintain decay probability
-const DEMENTIA_RECOVERY_PROBABILITY = 0.00002; // Increased recovery probability
-const DEMENTIA_DECAY_TIME = 10;
+const DEMENTIA_RECOVERY_PROBABILITY = 0.002; // Increased recovery probability
+const DEMENTIA_DECAY_TIME = 50;
 
 // Synaptic Plasticity settings
 const LEARNING_RATE = 0.01;
 const DECAY_RATE = 0.001;
 
+// Brain region layout
+const brainRegions = {
+    'frontalLobe': { xRange: [0, 50], yRange: [0, 100], density: 1.0 },
+    'temporalLobe': { xRange: [50, 100], yRange: [0, 100], density: 0.8 },
+    'parietalLobe': { xRange: [100, 150], yRange: [0, 100], density: 0.9 },
+    'occipitalLobe': { xRange: [150, 200], yRange: [0, 100], density: 0.7 },
+    'hippocampus': { xRange: [75, 125], yRange: [100, 150], density: 0.5 },
+    'cerebellum': { xRange: [0, 200], yRange: [150, 200], density: 0.6 },
+};
+
 // NeuronCell class to encapsulate the properties and behaviors of each cell
 class NeuronCell {
-    constructor(state = INACTIVE, activityLevel = 0, refractoryTime = 0, neuronType = 'excitatory', synapticStrength = 1, dementiaDecayTime = 0, connections = []) {
+    constructor(state = INACTIVE, activityLevel = 0, refractoryTime = 0, neuronType = 'excitatory', synapticStrength = 1, dementiaDecayTime = 0, region = 'frontalLobe', connections = []) {
         this.state = state;
         this.activityLevel = activityLevel;
         this.refractoryTime = refractoryTime;
         this.neuronType = neuronType; // 'excitatory' or 'inhibitory'
         this.synapticStrength = synapticStrength;
         this.dementiaDecayTime = dementiaDecayTime;
+        this.region = region; // Brain region the neuron belongs to
         this.connections = connections; // Array of connected neuron positions
     }
 
@@ -102,7 +113,7 @@ class NeuronCell {
             let nx = (x + dx + gridSize) % gridSize;
             let ny = (y + dy + gridSize) % gridSize;
             if (grid[nx][ny].state !== DEMENTIA_START && grid[nx][ny].state !== DEMENTIA_AFFECTED && grid[nx][ny].state !== ACTIVE && Math.random() < DEMENTIA_SPREAD_PROBABILITY) {
-                grid[nx][ny] = new NeuronCell(DEMENTIA_START, 0, 0, this.neuronType, this.synapticStrength);
+                grid[nx][ny] = new NeuronCell(DEMENTIA_START, 0, 0, this.neuronType, this.synapticStrength, 0, this.region);
             }
         });
     }
@@ -124,7 +135,7 @@ class NeuronCell {
             let nx = (x + dx + gridSize) % gridSize;
             let ny = (y + dy + gridSize) % gridSize;
             if (grid[nx][ny].state === INACTIVE && Math.random() < this.synapticStrength) {
-                grid[nx][ny] = new NeuronCell(ACTIVE, 0, 0, grid[nx][ny].neuronType, grid[nx][ny].synapticStrength);
+                grid[nx][ny] = new NeuronCell(ACTIVE, 0, 0, grid[nx][ny].neuronType, grid[nx][ny].synapticStrength, 0, grid[nx][ny].region);
             }
         });
 
@@ -136,26 +147,29 @@ class NeuronCell {
 // Initialize the grid with NeuronCell objects
 let grid = Array.from({ length: gridSize }, () => Array.from({ length: gridSize }, () => new NeuronCell()));
 
-// Initialize with some active neurons of different types
-const initialNeurons = [
-    { x: Math.floor(gridSize / 4), y: Math.floor(gridSize / 4), type: 'excitatory' },
-    { x: Math.floor(3 * gridSize / 4), y: Math.floor(3 * gridSize / 4), type: 'inhibitory' },
-    // Add more initial neurons to create a balanced and distributed setup
-    ...Array.from({ length: 20 }, () => ({
-        x: Math.floor(Math.random() * gridSize),
-        y: Math.floor(Math.random() * gridSize),
-        type: Math.random() < 0.5 ? 'excitatory' : 'inhibitory',
-        connections: Array.from({ length: 4 }, () => [Math.floor(Math.random() * 3) - 1, Math.floor(Math.random() * 3) - 1]) // Random initial connections
-    }))
-];
+// Initialize with neurons distributed across regions
+const initialNeurons = [];
+for (const region in brainRegions) {
+    const { xRange, yRange, density } = brainRegions[region];
+    const numNeurons = Math.floor(density * (xRange[1] - xRange[0]) * (yRange[1] - yRange[0]) / 10);
+    for (let i = 0; i < numNeurons; i++) {
+        initialNeurons.push({
+            x: Math.floor(Math.random() * (xRange[1] - xRange[0]) + xRange[0]),
+            y: Math.floor(Math.random() * (yRange[1] - yRange[0]) + yRange[0]),
+            type: Math.random() < 0.8 ? 'excitatory' : 'inhibitory',
+            region,
+            connections: Array.from({ length: 4 }, () => [Math.floor(Math.random() * 3) - 1, Math.floor(Math.random() * 3) - 1]) // Random initial connections
+        });
+    }
+}
 
-initialNeurons.forEach(({ x, y, type, connections }) => {
-    grid[x][y] = new NeuronCell(ACTIVE, 0, 0, type, Math.random(), 0, connections);
+initialNeurons.forEach(({ x, y, type, region, connections }) => {
+    grid[x][y] = new NeuronCell(ACTIVE, 0, 0, type, Math.random(), 0, region, connections);
 });
 
 // Function to update the grid based on neuronal activity rules
 function updateGrid(grid) {
-    let newGrid = grid.map(row => row.map(cell => new NeuronCell(cell.state, cell.activityLevel, cell.refractoryTime, cell.neuronType, cell.synapticStrength, cell.dementiaDecayTime, cell.connections)));
+    let newGrid = grid.map(row => row.map(cell => new NeuronCell(cell.state, cell.activityLevel, cell.refractoryTime, cell.neuronType, cell.synapticStrength, cell.dementiaDecayTime, cell.region, cell.connections)));
 
     for (let x = 0; x < gridSize; x++) {
         for (let y = 0; y < gridSize; y++) {
@@ -223,4 +237,4 @@ function simulate(iterations) {
 }
 
 // Run the simulation
-simulate(500);
+simulate(10000);
