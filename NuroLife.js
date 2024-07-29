@@ -4,7 +4,7 @@ const fs = require('fs');
 
 // Define the grid size and cell size for visualization
 const gridSize = 200;
-const cellSize = 4;
+const cellSize = 1;
 
 // Define cell states
 const INACTIVE = 0;
@@ -13,6 +13,7 @@ const REFRACTORY = 2;
 const INHIBITORY = 3;
 const DEMENTIA_START = 4;
 const DEMENTIA_AFFECTED = 5;
+const PERMANENT_DAMAGE = 6; // New state for permanent damage
 
 // Define refractory period for active cells
 const REFRACTORY_PERIOD = 50;
@@ -24,20 +25,26 @@ const REFRACTORY_THRESHOLD = 100;
 const CONNECTION_FACTOR = 2;
 
 // Dementia settings
-const DEMENTIA_PROBABILITY = 0.001;
-const DEMENTIA_SPREAD_PROBABILITY = 0.1;
-const DEMENTIA_DECAY_PROBABILITY = 0.05;
-const DEMENTIA_DECAY_TIME = 50;
+const DEMENTIA_PROBABILITY = 0.0007; // Increased initiation probability
+const DEMENTIA_SPREAD_PROBABILITY = 0.002; // Decreased spread probability
+const DEMENTIA_DECAY_PROBABILITY = 0.1; // Maintain decay probability
+const DEMENTIA_RECOVERY_PROBABILITY = 0.00002; // Increased recovery probability
+const DEMENTIA_DECAY_TIME = 10;
+
+// Synaptic Plasticity settings
+const LEARNING_RATE = 0.01;
+const DECAY_RATE = 0.001;
 
 // NeuronCell class to encapsulate the properties and behaviors of each cell
 class NeuronCell {
-    constructor(state = INACTIVE, activityLevel = 0, refractoryTime = 0, neuronType = 'excitatory', synapticStrength = 1, dementiaDecayTime = 0) {
+    constructor(state = INACTIVE, activityLevel = 0, refractoryTime = 0, neuronType = 'excitatory', synapticStrength = 1, dementiaDecayTime = 0, connections = []) {
         this.state = state;
         this.activityLevel = activityLevel;
         this.refractoryTime = refractoryTime;
         this.neuronType = neuronType; // 'excitatory' or 'inhibitory'
         this.synapticStrength = synapticStrength;
         this.dementiaDecayTime = dementiaDecayTime;
+        this.connections = connections; // Array of connected neuron positions
     }
 
     update(grid, x, y) {
@@ -52,11 +59,11 @@ class NeuronCell {
                 break;
             case ACTIVE:
                 this.activityLevel++;
-                this.connect(grid, x, y, CONNECTION_FACTOR);
                 if (Math.random() < DEACTIVATION_PROBABILITY || this.activityLevel > REFRACTORY_THRESHOLD) {
                     this.state = REFRACTORY;
                     this.refractoryTime = REFRACTORY_PERIOD;
                 }
+                this.propagateSignal(grid, x, y);
                 break;
             case REFRACTORY:
                 this.refractoryTime--;
@@ -70,13 +77,18 @@ class NeuronCell {
                 if (Math.random() < DEMENTIA_DECAY_PROBABILITY) {
                     this.state = DEMENTIA_AFFECTED;
                     this.dementiaDecayTime = DEMENTIA_DECAY_TIME;
+                } else if (Math.random() < DEMENTIA_RECOVERY_PROBABILITY) {
+                    this.state = INACTIVE;
                 }
                 break;
             case DEMENTIA_AFFECTED:
                 this.dementiaDecayTime--;
                 if (this.dementiaDecayTime <= 0) {
-                    this.state = INACTIVE;
+                    this.state = PERMANENT_DAMAGE;
                 }
+                break;
+            case PERMANENT_DAMAGE:
+                // No update needed, neuron is permanently damaged
                 break;
         }
     }
@@ -89,26 +101,35 @@ class NeuronCell {
         directions.forEach(([dx, dy]) => {
             let nx = (x + dx + gridSize) % gridSize;
             let ny = (y + dy + gridSize) % gridSize;
-            if (grid[nx][ny].state !== DEMENTIA_START && grid[nx][ny].state !== DEMENTIA_AFFECTED && Math.random() < DEMENTIA_SPREAD_PROBABILITY) {
+            if (grid[nx][ny].state !== DEMENTIA_START && grid[nx][ny].state !== DEMENTIA_AFFECTED && grid[nx][ny].state !== ACTIVE && Math.random() < DEMENTIA_SPREAD_PROBABILITY) {
                 grid[nx][ny] = new NeuronCell(DEMENTIA_START, 0, 0, this.neuronType, this.synapticStrength);
             }
         });
     }
 
-    connect(grid, x, y, connectionFactor) {
-        let directions = [
-            [0, 1], [1, 0], [0, -1], [-1, 0],
-            [-1, -1], [-1, 1], [1, -1], [1, 1],
-        ];
-        for (let i = 0; i < connectionFactor; i++) {
-            let direction = directions[Math.floor(Math.random() * directions.length)];
-            let [dx, dy] = direction;
+    propagateSignal(grid, x, y) {
+        if (this.state === DEMENTIA_START || this.state === DEMENTIA_AFFECTED || this.state === PERMANENT_DAMAGE) {
+            return; // Do not propagate signals from dementia-affected or permanently damaged neurons
+        }
+
+        // Strengthen connections (Hebbian learning)
+        this.connections.forEach(([dx, dy]) => {
             let nx = (x + dx + gridSize) % gridSize;
             let ny = (y + dy + gridSize) % gridSize;
-            if (grid[nx][ny].state === INACTIVE) {
-                grid[nx][ny] = new NeuronCell(ACTIVE, 0, 0, this.neuronType, this.synapticStrength);
+            grid[nx][ny].synapticStrength += LEARNING_RATE;
+        });
+
+        // Propagate signals to connected neurons
+        this.connections.forEach(([dx, dy]) => {
+            let nx = (x + dx + gridSize) % gridSize;
+            let ny = (y + dy + gridSize) % gridSize;
+            if (grid[nx][ny].state === INACTIVE && Math.random() < this.synapticStrength) {
+                grid[nx][ny] = new NeuronCell(ACTIVE, 0, 0, grid[nx][ny].neuronType, grid[nx][ny].synapticStrength);
             }
-        }
+        });
+
+        // Decay synaptic strengths (synaptic plasticity)
+        this.synapticStrength = Math.max(0, this.synapticStrength - DECAY_RATE);
     }
 }
 
@@ -119,15 +140,22 @@ let grid = Array.from({ length: gridSize }, () => Array.from({ length: gridSize 
 const initialNeurons = [
     { x: Math.floor(gridSize / 4), y: Math.floor(gridSize / 4), type: 'excitatory' },
     { x: Math.floor(3 * gridSize / 4), y: Math.floor(3 * gridSize / 4), type: 'inhibitory' },
+    // Add more initial neurons to create a balanced and distributed setup
+    ...Array.from({ length: 20 }, () => ({
+        x: Math.floor(Math.random() * gridSize),
+        y: Math.floor(Math.random() * gridSize),
+        type: Math.random() < 0.5 ? 'excitatory' : 'inhibitory',
+        connections: Array.from({ length: 4 }, () => [Math.floor(Math.random() * 3) - 1, Math.floor(Math.random() * 3) - 1]) // Random initial connections
+    }))
 ];
 
-initialNeurons.forEach(({ x, y, type }) => {
-    grid[x][y] = new NeuronCell(ACTIVE, 0, 0, type, Math.random());
+initialNeurons.forEach(({ x, y, type, connections }) => {
+    grid[x][y] = new NeuronCell(ACTIVE, 0, 0, type, Math.random(), 0, connections);
 });
 
 // Function to update the grid based on neuronal activity rules
 function updateGrid(grid) {
-    let newGrid = grid.map(row => row.map(cell => new NeuronCell(cell.state, cell.activityLevel, cell.refractoryTime, cell.neuronType, cell.synapticStrength, cell.dementiaDecayTime)));
+    let newGrid = grid.map(row => row.map(cell => new NeuronCell(cell.state, cell.activityLevel, cell.refractoryTime, cell.neuronType, cell.synapticStrength, cell.dementiaDecayTime, cell.connections)));
 
     for (let x = 0; x < gridSize; x++) {
         for (let y = 0; y < gridSize; y++) {
@@ -156,10 +184,13 @@ function drawGrid(grid, ctx) {
                     ctx.fillStyle = 'grey';
                     break;
                 case DEMENTIA_START:
-                    ctx.fillStyle = 'yellow';
+                    ctx.fillStyle = 'purple';
                     break;
                 case DEMENTIA_AFFECTED:
-                    ctx.fillStyle = 'brown';
+                    ctx.fillStyle = 'darkblue';
+                    break;
+                case PERMANENT_DAMAGE:
+                    ctx.fillStyle = 'black';
                     break;
             }
             ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
