@@ -7,110 +7,134 @@ const gridSize = 200;
 const cellSize = 4;
 
 // Define cell states
-const EMPTY = 0;
-const HYPHAE = 1;
-const TIP = 2;
-const SPORE = 3;
-const DEAD = 4;
-const DECAYING = 5;
+const INACTIVE = 0;
+const ACTIVE = 1;
+const REFRACTORY = 2;
+const INHIBITORY = 3;
+const TUMOR_INITIATION = 4;
+const TUMOR_GROWTH = 5;
+const TUMOR_DECAY = 6;
 
-// Define decay time for dead cells
-const DECAY_TIME = 50;
+// Define refractory period for active cells
+const REFRACTORY_PERIOD = 50;
 
-// Growth settings
-const SPORE_TO_TIP_PROBABILITY = 0.18;
-const RANDOM_DEATH_PROBABILITY = 0.005;
-const AGE_THRESHOLD = 120;
-const SPREAD_FACTOR = 2;
+// Activation settings
+const ACTIVATION_PROBABILITY = 0.2;
+const DEACTIVATION_PROBABILITY = 0.01;
+const REFRACTORY_THRESHOLD = 100;
+const CONNECTION_FACTOR = 2;
 
-// FungusCell class to encapsulate the properties and behaviors of each cell
-class FungusCell {
-    constructor(state = EMPTY, age = 0, decayTime = 0, strain = '') {
+// Tumor settings
+const TUMOR_INITIATION_PROBABILITY = 0.0001; // Less frequent tumor initiation
+const TUMOR_GROWTH_PROBABILITY = 0.1;
+const TUMOR_DECAY_PROBABILITY = 0.05;
+const TUMOR_SPREAD_PROBABILITY = 0.05;
+const TUMOR_DECAY_TIME = 50; // Duration of tumor decay
+
+// NeuronCell class to encapsulate the properties and behaviors of each cell
+class NeuronCell {
+    constructor(state = INACTIVE, activityLevel = 0, refractoryTime = 0, neuronType = 'excitatory', synapticStrength = 1, tumorDecayTime = 0) {
         this.state = state;
-        this.age = age;
-        this.decayTime = decayTime;
-        this.strain = strain; // Add strain to differentiate between competing fungi
+        this.activityLevel = activityLevel;
+        this.refractoryTime = refractoryTime;
+        this.neuronType = neuronType; // 'excitatory' or 'inhibitory'
+        this.synapticStrength = synapticStrength;
+        this.tumorDecayTime = tumorDecayTime;
     }
 
     update(grid, x, y) {
         switch (this.state) {
-            case SPORE:
-                if (Math.random() < SPORE_TO_TIP_PROBABILITY) {
-                    this.state = TIP;
-                    this.age = 0;
+            case INACTIVE:
+                if (Math.random() < ACTIVATION_PROBABILITY) {
+                    this.state = ACTIVE;
+                    this.activityLevel = 0;
+                } else if (Math.random() < TUMOR_INITIATION_PROBABILITY) {
+                    this.state = TUMOR_INITIATION;
                 }
                 break;
-            case TIP:
-                this.state = HYPHAE;
-                this.age++;
-                this.spread(grid, x, y, SPREAD_FACTOR);
-                break;
-            case HYPHAE:
-                this.age++;
-                if (Math.random() < RANDOM_DEATH_PROBABILITY || this.age > AGE_THRESHOLD || this.countNeighbors(grid, x, y) > 4) {
-                    this.state = DECAYING;
-                    this.decayTime = DECAY_TIME;
-                } else if (Math.random() < RANDOM_DEATH_PROBABILITY) {
-                    this.state = SPORE;
-                    this.age = 0;
+            case ACTIVE:
+                this.activityLevel++;
+                this.connect(grid, x, y, CONNECTION_FACTOR);
+                if (Math.random() < DEACTIVATION_PROBABILITY || this.activityLevel > REFRACTORY_THRESHOLD) {
+                    this.state = REFRACTORY;
+                    this.refractoryTime = REFRACTORY_PERIOD;
                 }
                 break;
-            case DECAYING:
-                this.decayTime--;
-                if (this.decayTime <= 0) {
-                    this.state = EMPTY;
-                    this.age = 0;
-                    this.decayTime = 0;
+            case REFRACTORY:
+                this.refractoryTime--;
+                if (this.refractoryTime <= 0) {
+                    this.state = INACTIVE;
+                    this.activityLevel = 0;
+                }
+                break;
+            case TUMOR_INITIATION:
+                if (Math.random() < TUMOR_GROWTH_PROBABILITY) {
+                    this.state = TUMOR_GROWTH;
+                }
+                break;
+            case TUMOR_GROWTH:
+                this.spreadTumor(grid, x, y);
+                if (Math.random() < TUMOR_DECAY_PROBABILITY) {
+                    this.state = TUMOR_DECAY;
+                    this.tumorDecayTime = TUMOR_DECAY_TIME;
+                }
+                break;
+            case TUMOR_DECAY:
+                this.tumorDecayTime--;
+                if (this.tumorDecayTime <= 0) {
+                    this.state = INACTIVE;
                 }
                 break;
         }
     }
 
-    spread(grid, x, y, spreadFactor) {
+    spreadTumor(grid, x, y) {
         let directions = [
             [0, 1], [1, 0], [0, -1], [-1, 0],
             [-1, -1], [-1, 1], [1, -1], [1, 1],
         ];
-        for (let i = 0; i < spreadFactor; i++) {
+        directions.forEach(([dx, dy]) => {
+            let nx = (x + dx + gridSize) % gridSize;
+            let ny = (y + dy + gridSize) % gridSize;
+            if (grid[nx][ny].state !== TUMOR_GROWTH && Math.random() < TUMOR_SPREAD_PROBABILITY) {
+                grid[nx][ny] = new NeuronCell(TUMOR_INITIATION, 0, 0, this.neuronType, this.synapticStrength);
+            }
+        });
+    }
+
+    connect(grid, x, y, connectionFactor) {
+        let directions = [
+            [0, 1], [1, 0], [0, -1], [-1, 0],
+            [-1, -1], [-1, 1], [1, -1], [1, 1],
+        ];
+        for (let i = 0; i < connectionFactor; i++) {
             let direction = directions[Math.floor(Math.random() * directions.length)];
             let [dx, dy] = direction;
             let nx = (x + dx + gridSize) % gridSize;
             let ny = (y + dy + gridSize) % gridSize;
-            if (grid[nx][ny].state === EMPTY) {
-                grid[nx][ny] = new FungusCell(TIP, 0, 0, this.strain);
+            if (grid[nx][ny].state === INACTIVE) {
+                grid[nx][ny] = new NeuronCell(ACTIVE, 0, 0, this.neuronType, this.synapticStrength);
             }
         }
     }
-
-    countNeighbors(grid, x, y) {
-        let directions = [
-            [0, 1], [1, 0], [0, -1], [-1, 0],
-            [-1, -1], [-1, 1], [1, -1], [1, 1],
-        ];
-        return directions.reduce((count, [dx, dy]) => {
-            let nx = (x + dx + gridSize) % gridSize;
-            let ny = (y + dy + gridSize) % gridSize;
-            return count + (grid[nx][ny].state === HYPHAE ? 1 : 0);
-        }, 0);
-    }
 }
 
-// Initialize the grid with FungusCell objects
-let grid = Array.from({ length: gridSize }, () => Array.from({ length: gridSize }, () => new FungusCell()));
+// Initialize the grid with NeuronCell objects
+let grid = Array.from({ length: gridSize }, () => Array.from({ length: gridSize }, () => new NeuronCell()));
 
-// Initialize with some spores for two strains
-const initialSpores = [
-    { x: Math.floor(gridSize / 4), y: Math.floor(gridSize / 4), strain: 'Penicillium' },
-    { x: Math.floor(3 * gridSize / 4), y: Math.floor(3 * gridSize / 4), strain: 'Aspergillus' },
+// Initialize with some active neurons of different types
+const initialNeurons = [
+    { x: Math.floor(gridSize / 4), y: Math.floor(gridSize / 4), type: 'excitatory' },
+    { x: Math.floor(3 * gridSize / 4), y: Math.floor(3 * gridSize / 4), type: 'inhibitory' },
 ];
 
-initialSpores.forEach(({ x, y, strain }) => {
-    grid[x][y] = new FungusCell(SPORE, 0, 0, strain);
+initialNeurons.forEach(({ x, y, type }) => {
+    grid[x][y] = new NeuronCell(ACTIVE, 0, 0, type, Math.random());
 });
 
-// Function to update the grid based on fungal growth and decay rules
+// Function to update the grid based on neuronal activity rules
 function updateGrid(grid) {
-    let newGrid = grid.map(row => row.map(cell => new FungusCell(cell.state, cell.age, cell.decayTime, cell.strain)));
+    let newGrid = grid.map(row => row.map(cell => new NeuronCell(cell.state, cell.activityLevel, cell.refractoryTime, cell.neuronType, cell.synapticStrength, cell.tumorDecayTime)));
 
     for (let x = 0; x < gridSize; x++) {
         for (let y = 0; y < gridSize; y++) {
@@ -121,25 +145,31 @@ function updateGrid(grid) {
     return newGrid;
 }
 
-// Function to draw the grid on a canvas
+// Function to draw the grid on a canvas with synaptic connections and gradient colors
 function drawGrid(grid, ctx) {
+    // Clear canvas
+    ctx.clearRect(0, 0, gridSize * cellSize, gridSize * cellSize);
+
     for (let x = 0; x < gridSize; x++) {
         for (let y = 0; y < gridSize; y++) {
             switch (grid[x][y].state) {
-                case EMPTY:
+                case INACTIVE:
                     ctx.fillStyle = 'white';
                     break;
-                case HYPHAE:
-                    ctx.fillStyle = grid[x][y].strain === 'Penicillium' ? 'green' : 'brown';
+                case ACTIVE:
+                    ctx.fillStyle = grid[x][y].neuronType === 'excitatory' ? `rgba(0, 0, 255, ${grid[x][y].synapticStrength})` : `rgba(255, 0, 0, ${grid[x][y].synapticStrength})`;
                     break;
-                case TIP:
-                    ctx.fillStyle = grid[x][y].strain === 'Penicillium' ? 'darkgreen' : 'darkbrown';
-                    break;
-                case SPORE:
-                    ctx.fillStyle = grid[x][y].strain === 'Penicillium' ? 'blue' : 'yellow';
-                    break;
-                case DECAYING:
+                case REFRACTORY:
                     ctx.fillStyle = 'grey';
+                    break;
+                case TUMOR_INITIATION:
+                    ctx.fillStyle = 'yellow';
+                    break;
+                case TUMOR_GROWTH:
+                    ctx.fillStyle = 'orange';
+                    break;
+                case TUMOR_DECAY:
+                    ctx.fillStyle = 'brown';
                     break;
             }
             ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
@@ -153,7 +183,7 @@ const ctx = canvas.getContext('2d');
 
 // Create a GIF encoder
 const encoder = new GIFEncoder(gridSize * cellSize, gridSize * cellSize);
-encoder.createReadStream().pipe(fs.createWriteStream('fungal-life-competing-strains.gif'));
+encoder.createReadStream().pipe(fs.createWriteStream('neuronal-activity-with-tumor-lifecycle.gif'));
 encoder.start();
 encoder.setRepeat(0); // 0 for repeat, -1 for no-repeat
 encoder.setDelay(100); // frame delay in ms
