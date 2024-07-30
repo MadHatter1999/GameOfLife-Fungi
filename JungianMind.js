@@ -6,171 +6,230 @@ const fs = require('fs');
 const gridSize = 200;
 const cellSize = 4;
 
-// Define cell states
+// Define cell states and their subcategories
 const EMPTY = 0;
-const CONSCIOUS = 1;
-const INTEGRATION = 2;
-const UNCONSCIOUS = 3;
-const CONFLICT = 4;
-const RESOLUTION = 5;
+const CONSCIOUS_AWARE = 1;
+const CONSCIOUS_RATIONALIZED = 2;
+const SHADOW_REPRESSED = 3;
+const SHADOW_LATENT = 4;
+const POTENTIAL_CONFLICT = 5;
+const CONFLICT = 6;
+const INTEGRATED = 7;
+const SUBDUED = 8;
 
-// Define decay time for resolution state
-const RESOLUTION_TIME = 50;
+// Define colors for visualization
+const colors = {
+  [EMPTY]: 'white',
+  [CONSCIOUS_AWARE]: 'blue',
+  [CONSCIOUS_RATIONALIZED]: 'lightblue',
+  [SHADOW_REPRESSED]: 'darkpurple',
+  [SHADOW_LATENT]: 'purple',
+  [POTENTIAL_CONFLICT]: 'orange',
+  [CONFLICT]: 'red',
+  [INTEGRATED]: 'green',
+  [SUBDUED]: 'grey'
+};
 
-// Mental energy level affecting transitions
-const MAX_MENTAL_ENERGY = 100;
-let mentalEnergy = 50; // Starts at a neutral level
+// Define state transition probabilities and dynamics
+const SHADOW_TO_POTENTIAL_CONFLICT_PROBABILITY = 0.1;
+const POTENTIAL_CONFLICT_TO_CONFLICT_PROBABILITY = 0.2;
+const CONFLICT_TO_INTEGRATED_PROBABILITY = 0.15;
+const CONFLICT_TO_SUBDUED_PROBABILITY = 0.05;
+const CONSCIOUS_INTROSPECTION_PROBABILITY = 0.05; // Chance for introspection
+const INFLUENCE_SPREAD_PROBABILITY = 0.3; // Chance of influencing neighboring cells
 
-// Base spread factor for influence
-const INFLUENCE_SPREAD_BASE = 2;
+// Emotional intensity levels affecting transitions
+let emotionalIntensity = 50; // Starts at a neutral level
+const MAX_EMOTIONAL_INTENSITY = 100;
 
-// Probability functions for state transitions based on mental energy and neighbor influence
-function getTransitionProbability(cell, grid, x, y) {
-    let baseProb = Math.random();
-    let neighborInfluence = countInfluentialNeighbors(grid, x, y);
-    let energyFactor = mentalEnergy / MAX_MENTAL_ENERGY;
+// Archetypes influencing cells
+const ARCHETYPE_ANIMUS = 1;
+const ARCHETYPE_ANIMA = 2;
+const ARCHETYPE_PERSONA = 3;
 
-    switch (cell.state) {
-        case UNCONSCIOUS:
-            return baseProb < energyFactor * 0.2 + neighborInfluence * 0.1;
-        case INTEGRATION:
-            return baseProb < 0.15 + neighborInfluence * 0.05;
-        case CONSCIOUS:
-            return baseProb < 0.05; // Stable state with low decay probability
-        case CONFLICT:
-            return baseProb < 0.3 + energyFactor * 0.1;
-        default:
-            return false;
-    }
-}
+// Archetype effects mapping
+const archetypeEffects = {
+  [ARCHETYPE_ANIMUS]: { affectConscious: 0.1, affectShadow: 0.2 },
+  [ARCHETYPE_ANIMA]: { affectConscious: 0.2, affectShadow: 0.1 },
+  [ARCHETYPE_PERSONA]: { affectConscious: 0.3, affectShadow: 0.1 }
+};
 
-// Count neighboring cells with significant psychological influence
-function countInfluentialNeighbors(grid, x, y) {
-    let directions = [
-        [0, 1], [1, 0], [0, -1], [-1, 0],
-        [-1, -1], [-1, 1], [1, -1], [1, 1],
-    ];
-    return directions.reduce((count, [dx, dy]) => {
-        let nx = (x + dx + gridSize) % gridSize;
-        let ny = (y + dy + gridSize) % gridSize;
-        return count + (grid[nx][ny].state !== EMPTY ? 1 : 0);
-    }, 0);
-}
-
-// PsycheCell class representing different states of the psyche
+// Cell class representing the psychological states
 class PsycheCell {
-    constructor(state = EMPTY, age = 0, resolutionTime = 0, archetype = '') {
-        this.state = state;
-        this.age = age;
-        this.resolutionTime = resolutionTime;
-        this.archetype = archetype; // Represents psychological aspects like archetypes
+  constructor(state = EMPTY, archetype = null) {
+    this.state = state;
+    this.archetype = archetype; // Representing influence by a specific archetype
+    this.emotionalState = Math.random() * MAX_EMOTIONAL_INTENSITY; // Initialize with random emotional intensity
+    this.history = []; // Stores previous states for historical context
+  }
+
+  update(grid, x, y) {
+    let neighbors = this.countNeighbors(grid, x, y);
+    let archetypeEffect = this.archetype ? archetypeEffects[this.archetype] : { affectConscious: 0, affectShadow: 0 };
+    
+    // Record the current state in history
+    this.history.push(this.state);
+
+    // Influence neighboring cells based on state
+    if (Math.random() < INFLUENCE_SPREAD_PROBABILITY) {
+      this.spreadInfluence(grid, x, y);
     }
 
-    update(grid, x, y) {
-        if (getTransitionProbability(this, grid, x, y)) {
-            switch (this.state) {
-                case UNCONSCIOUS:
-                    this.state = INTEGRATION;
-                    this.age = 0;
-                    break;
-                case INTEGRATION:
-                    this.state = CONSCIOUS;
-                    this.age = 0;
-                    break;
-                case CONSCIOUS:
-                    if (Math.random() < 0.01) { // Random decay due to internal conflict
-                        this.state = CONFLICT;
-                        this.resolutionTime = RESOLUTION_TIME;
-                    }
-                    break;
-                case CONFLICT:
-                    this.resolutionTime--;
-                    if (this.resolutionTime <= 0) {
-                        this.state = RESOLUTION;
-                    }
-                    break;
-                case RESOLUTION:
-                    this.state = EMPTY;
-                    break;
-            }
-        }
-        this.age++;
-    }
+    // Adjust emotional state based on local context
+    this.adjustEmotionalState(neighbors);
 
-    spread(grid, x, y) {
-        let spreadFactor = INFLUENCE_SPREAD_BASE + Math.floor(mentalEnergy / 20);
-        let directions = [
-            [0, 1], [1, 0], [0, -1], [-1, 0],
-            [-1, -1], [-1, 1], [1, -1], [1, 1],
-        ];
-        for (let i = 0; i < spreadFactor; i++) {
-            let direction = directions[Math.floor(Math.random() * directions.length)];
-            let [dx, dy] = direction;
-            let nx = (x + dx + gridSize) % gridSize;
-            let ny = (y + dy + gridSize) % gridSize;
-            if (grid[nx][ny].state === EMPTY) {
-                grid[nx][ny] = new PsycheCell(UNCONSCIOUS, 0, 0, this.archetype);
-            }
+    // State transitions based on internal and external factors
+    switch (this.state) {
+      case SHADOW_REPRESSED:
+        if (Math.random() < SHADOW_TO_POTENTIAL_CONFLICT_PROBABILITY + emotionalIntensity / MAX_EMOTIONAL_INTENSITY * 0.05 + archetypeEffect.affectShadow) {
+          this.state = POTENTIAL_CONFLICT;
         }
+        break;
+      case SHADOW_LATENT:
+        if (Math.random() < SHADOW_TO_POTENTIAL_CONFLICT_PROBABILITY + emotionalIntensity / MAX_EMOTIONAL_INTENSITY * 0.1 + archetypeEffect.affectShadow) {
+          this.state = POTENTIAL_CONFLICT;
+        }
+        break;
+      case POTENTIAL_CONFLICT:
+        if (Math.random() < POTENTIAL_CONFLICT_TO_CONFLICT_PROBABILITY + neighbors[CONFLICT] * 0.05) {
+          this.state = CONFLICT;
+        }
+        break;
+      case CONFLICT:
+        if (Math.random() < CONFLICT_TO_INTEGRATED_PROBABILITY + neighbors[INTEGRATED] * 0.1 + archetypeEffect.affectConscious) {
+          this.state = INTEGRATED;
+        } else if (Math.random() < CONFLICT_TO_SUBDUED_PROBABILITY + neighbors[SUBDUED] * 0.1) {
+          this.state = SUBDUED;
+        }
+        break;
+      case INTEGRATED:
+        // Cells remain integrated once this state is achieved
+        break;
+      case SUBDUED:
+        // Subdued state represents temporary suppression
+        break;
+      case CONSCIOUS_AWARE:
+      case CONSCIOUS_RATIONALIZED:
+        if (Math.random() < CONSCIOUS_INTROSPECTION_PROBABILITY) {
+          this.introspection(grid, x, y);
+        }
+        break;
     }
+  }
+
+  introspection(grid, x, y) {
+    // Introspection can lead to discovering shadow aspects or re-evaluating states
+    let neighbors = this.countNeighbors(grid, x, y);
+    if (neighbors[SHADOW_REPRESSED] > 0 || neighbors[SHADOW_LATENT] > 0) {
+      // Increase probability of conflict or integration
+      if (Math.random() < 0.3) {
+        this.state = POTENTIAL_CONFLICT; // Discovering repressed content
+      } else if (Math.random() < 0.2) {
+        this.state = INTEGRATED; // Successful integration of shadow content
+      }
+    } else {
+      // Re-evaluate conscious state
+      if (this.state === CONSCIOUS_RATIONALIZED && Math.random() < 0.3) {
+        this.state = CONSCIOUS_AWARE; // Becoming more self-aware
+      } else if (this.state === CONSCIOUS_AWARE && Math.random() < 0.2) {
+        this.state = CONSCIOUS_RATIONALIZED; // Rationalizing or suppressing emotions
+      }
+    }
+  }
+
+  spreadInfluence(grid, x, y) {
+    // Spread influence to neighboring cells based on current state and emotional intensity
+    let directions = [
+      [0, 1], [1, 0], [0, -1], [-1, 0],
+      [-1, -1], [-1, 1], [1, -1], [1, 1]
+    ];
+
+    directions.forEach(([dx, dy]) => {
+      let nx = (x + dx + gridSize) % gridSize;
+      let ny = (y + dy + gridSize) % gridSize;
+      let neighborCell = grid[nx][ny];
+
+      if (this.state === CONSCIOUS_AWARE || this.state === CONSCIOUS_RATIONALIZED) {
+        // Conscious cells can influence shadow cells to become aware or rationalized
+        if (neighborCell.state === SHADOW_REPRESSED || neighborCell.state === SHADOW_LATENT) {
+          if (Math.random() < this.emotionalState / MAX_EMOTIONAL_INTENSITY) {
+            neighborCell.state = POTENTIAL_CONFLICT; // Expose hidden conflicts
+          }
+        }
+      } else if (this.state === CONFLICT) {
+        // Conflict cells can spread conflict to nearby latent or repressed shadow cells
+        if (neighborCell.state === SHADOW_REPRESSED || neighborCell.state === SHADOW_LATENT) {
+          if (Math.random() < 0.1) {
+            neighborCell.state = POTENTIAL_CONFLICT;
+          }
+        }
+      }
+    });
+  }
+
+  adjustEmotionalState(neighbors) {
+    // Increase emotional intensity if surrounded by conflicting states
+    if (neighbors[CONFLICT] > 0 || neighbors[POTENTIAL_CONFLICT] > 0) {
+      this.emotionalState = Math.min(MAX_EMOTIONAL_INTENSITY, this.emotionalState + 5);
+    } else {
+      this.emotionalState = Math.max(0, this.emotionalState - 1);
+    }
+  }
+
+  countNeighbors(grid, x, y) {
+    let counts = Array(9).fill(0); // One count for each state
+    let directions = [
+      [0, 1], [1, 0], [0, -1], [-1, 0],
+      [-1, -1], [-1, 1], [1, -1], [1, 1]
+    ];
+
+    directions.forEach(([dx, dy]) => {
+      let nx = (x + dx + gridSize) % gridSize;
+      let ny = (y + dy + gridSize) % gridSize;
+      counts[grid[nx][ny].state]++;
+    });
+
+    return counts;
+  }
 }
 
 // Initialize the grid with PsycheCell objects
 let grid = Array.from({ length: gridSize }, () => Array.from({ length: gridSize }, () => new PsycheCell()));
 
-// Initialize with some unconscious content representing different archetypes
-const initialArchetypes = [
-    { x: Math.floor(gridSize / 4), y: Math.floor(gridSize / 4), archetype: 'Animus' },
-    { x: Math.floor(3 * gridSize / 4), y: Math.floor(3 * gridSize / 4), archetype: 'Anima' },
-];
-
-initialArchetypes.forEach(({ x, y, archetype }) => {
-    grid[x][y] = new PsycheCell(UNCONSCIOUS, 0, 0, archetype);
-});
-
-// Function to update the grid based on psychological dynamics
-function updateGrid(grid) {
-    let newGrid = grid.map(row => row.map(cell => new PsycheCell(cell.state, cell.age, cell.resolutionTime, cell.archetype)));
-
-    for (let x = 0; x < gridSize; x++) {
-        for (let y = 0; y < gridSize; y++) {
-            newGrid[x][y].update(newGrid, x, y);
-            if (newGrid[x][y].state === CONSCIOUS) {
-                newGrid[x][y].spread(newGrid, x, y);
-            }
-        }
+// Initial seeding with conscious and shadow regions, with archetypal influence
+for (let x = 0; x < gridSize; x++) {
+  for (let y = 0; y < gridSize; y++) {
+    if (x < gridSize / 2) {
+      let archetype = Math.random() < 0.1 ? ARCHETYPE_PERSONA : null;
+      grid[x][y] = new PsycheCell(Math.random() < 0.5 ? CONSCIOUS_AWARE : CONSCIOUS_RATIONALIZED, archetype);
+    } else {
+      let archetype = Math.random() < 0.1 ? (Math.random() < 0.5 ? ARCHETYPE_ANIMUS : ARCHETYPE_ANIMA) : null;
+      grid[x][y] = new PsycheCell(Math.random() < 0.5 ? SHADOW_REPRESSED : SHADOW_LATENT, archetype);
     }
+  }
+}
 
-    return newGrid;
+// Function to update the grid based on state transitions
+function updateGrid(grid) {
+  let newGrid = grid.map(row => row.map(cell => new PsycheCell(cell.state, cell.archetype)));
+
+  for (let x = 0; x < gridSize; x++) {
+    for (let y = 0; y < gridSize; y++) {
+      newGrid[x][y].update(grid, x, y);
+    }
+  }
+
+  return newGrid;
 }
 
 // Function to draw the grid on a canvas
 function drawGrid(grid, ctx) {
-    for (let x = 0; x < gridSize; x++) {
-        for (let y = 0; y < gridSize; y++) {
-            switch (grid[x][y].state) {
-                case EMPTY:
-                    ctx.fillStyle = 'white';
-                    break;
-                case CONSCIOUS:
-                    ctx.fillStyle = 'green';
-                    break;
-                case INTEGRATION:
-                    ctx.fillStyle = 'blue';
-                    break;
-                case UNCONSCIOUS:
-                    ctx.fillStyle = 'purple';
-                    break;
-                case CONFLICT:
-                    ctx.fillStyle = 'red';
-                    break;
-                case RESOLUTION:
-                    ctx.fillStyle = 'grey';
-                    break;
-            }
-            ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-        }
+  for (let x = 0; x < gridSize; x++) {
+    for (let y = 0; y < gridSize; y++) {
+      ctx.fillStyle = colors[grid[x][y].state];
+      ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
     }
+  }
 }
 
 // Create a canvas and context
@@ -179,7 +238,7 @@ const ctx = canvas.getContext('2d');
 
 // Create a GIF encoder
 const encoder = new GIFEncoder(gridSize * cellSize, gridSize * cellSize);
-encoder.createReadStream().pipe(fs.createWriteStream('jungian-psyche-simulation.gif'));
+encoder.createReadStream().pipe(fs.createWriteStream('mind-shadow-conflict-enhanced.gif'));
 encoder.start();
 encoder.setRepeat(0); // 0 for repeat, -1 for no-repeat
 encoder.setDelay(100); // frame delay in ms
@@ -187,17 +246,17 @@ encoder.setQuality(10); // image quality. 10 is default
 
 // Main simulation loop
 function simulate(iterations) {
-    for (let i = 0; i < iterations; i++) {
-        console.log('Current Cycle:', i);
-        grid = updateGrid(grid);
-        drawGrid(grid, ctx);
-        encoder.addFrame(ctx);
+  for (let i = 0; i < iterations; i++) {
+    console.log('Current Cycle:', i);
+    grid = updateGrid(grid);
+    drawGrid(grid, ctx);
+    encoder.addFrame(ctx);
 
-        // Adjust mental energy dynamically (example: stress events)
-        mentalEnergy = Math.max(0, Math.min(MAX_MENTAL_ENERGY, mentalEnergy + (Math.random() - 0.5) * 5));
-    }
-    encoder.finish();
-    console.log('The GIF file was created.');
+    // Adjust emotional intensity dynamically (example: events increasing tension)
+    emotionalIntensity = Math.max(0, Math.min(MAX_EMOTIONAL_INTENSITY, emotionalIntensity + (Math.random() - 0.5) * 5));
+  }
+  encoder.finish();
+  console.log('The GIF file was created.');
 }
 
 // Run the simulation
