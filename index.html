@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fungal Growth Simulation</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .grid {
+            margin: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="grid"></div>
+    <script>
+        // Configuration
+        const gridSize = 2000;
+        const cellSize = 1; // Increase for better visibility
+        const iterations = 4000;
+
+        // Define cell states
+        const EMPTY = 0;
+        const HYPHAE = 1;
+        const TIP = 2;
+        const SPORE = 3;
+        const DEAD = 4;
+        const DECAYING = 5;
+
+        // Growth settings
+        const SPORE_TO_TIP_PROBABILITY = 0.18;
+        const RANDOM_DEATH_PROBABILITY = 0.005;
+        const AGE_THRESHOLD = 120;
+        const SPREAD_FACTOR = 2;
+        const DECAY_TIME = 50;
+
+        // FungusCell class to encapsulate the properties and behaviors of each cell
+        class FungusCell {
+            constructor(state = EMPTY, age = 0, decayTime = 0, strain = '') {
+                this.state = state;
+                this.age = age;
+                this.decayTime = decayTime;
+                this.strain = strain; // Add strain to differentiate between competing fungi
+            }
+
+            update(grid, x, y) {
+                switch (this.state) {
+                    case SPORE:
+                        if (Math.random() < SPORE_TO_TIP_PROBABILITY) {
+                            this.state = TIP;
+                            this.age = 0;
+                        }
+                        break;
+                    case TIP:
+                        this.state = HYPHAE;
+                        this.age++;
+                        this.spread(grid, x, y, SPREAD_FACTOR);
+                        break;
+                    case HYPHAE:
+                        this.age++;
+                        if (Math.random() < RANDOM_DEATH_PROBABILITY || this.age > AGE_THRESHOLD || this.countNeighbors(grid, x, y) > 4) {
+                            this.state = DECAYING;
+                            this.decayTime = DECAY_TIME;
+                        }
+                        break;
+                    case DECAYING:
+                        this.decayTime--;
+                        if (this.decayTime <= 0) {
+                            this.state = EMPTY;
+                            this.age = 0;
+                            this.decayTime = 0;
+                        }
+                        break;
+                }
+            }
+
+            spread(grid, x, y, spreadFactor) {
+                let directions = [
+                    [0, 1], [1, 0], [0, -1], [-1, 0],
+                    [-1, -1], [-1, 1], [1, -1], [1, 1],
+                ];
+                for (let i = 0; i < spreadFactor; i++) {
+                    let direction = directions[Math.floor(Math.random() * directions.length)];
+                    let [dx, dy] = direction;
+                    let nx = (x + dx + gridSize) % gridSize;
+                    let ny = (y + dy + gridSize) % gridSize;
+                    if (grid[nx][ny].state === EMPTY) {
+                        grid[nx][ny] = new FungusCell(TIP, 0, 0, this.strain);
+                    }
+                }
+            }
+
+            countNeighbors(grid, x, y) {
+                let directions = [
+                    [0, 1], [1, 0], [0, -1], [-1, 0],
+                    [-1, -1], [-1, 1], [1, -1], [1, 1],
+                ];
+                return directions.reduce((count, [dx, dy]) => {
+                    let nx = (x + dx + gridSize) % gridSize;
+                    let ny = (y + dy + gridSize) % gridSize;
+                    return count + (grid[nx][ny].state === HYPHAE ? 1 : 0);
+                }, 0);
+            }
+        }
+
+        // Initialize the grid with FungusCell objects
+        let grid = Array.from({ length: gridSize }, () => Array.from({ length: gridSize }, () => new FungusCell()));
+
+        // Initialize with some spores for two strains
+        const initialSpores = [
+            { x: Math.floor(gridSize / 4), y: Math.floor(gridSize / 4), strain: 'Penicillium' },
+            { x: Math.floor(3 * gridSize / 4), y: Math.floor(3 * gridSize / 4), strain: 'Aspergillus' },
+        ];
+
+        initialSpores.forEach(({ x, y, strain }) => {
+            grid[x][y] = new FungusCell(SPORE, 0, 0, strain);
+        });
+
+        // Function to update the grid based on fungal growth and decay rules
+        function updateGrid(grid) {
+            let newGrid = grid.map(row => row.map(cell => new FungusCell(cell.state, cell.age, cell.decayTime, cell.strain)));
+
+            for (let x = 0; x < gridSize; x++) {
+                for (let y = 0; y < gridSize; y++) {
+                    newGrid[x][y].update(newGrid, x, y);
+                }
+            }
+
+            return newGrid;
+        }
+
+        // Create an SVG container
+        const svg = d3.select('.grid').append('svg')
+            .attr('width', gridSize * cellSize)
+            .attr('height', gridSize * cellSize);
+
+        // Function to draw the grid using D3.js
+        function drawGrid(grid) {
+            const cells = svg.selectAll('rect').data(grid.flat());
+
+            cells.enter().append('rect')
+                .attr('x', (_, i) => (i % gridSize) * cellSize)
+                .attr('y', (_, i) => Math.floor(i / gridSize) * cellSize)
+                .attr('width', cellSize)
+                .attr('height', cellSize)
+                .merge(cells)
+                .attr('fill', cell => {
+                    switch (cell.state) {
+                        case EMPTY:
+                            return 'white';
+                        case HYPHAE:
+                            return cell.strain === 'Penicillium' ? 'green' : 'brown';
+                        case TIP:
+                            return cell.strain === 'Penicillium' ? 'darkgreen' : 'darkbrown';
+                        case SPORE:
+                            return cell.strain === 'Penicillium' ? 'blue' : 'yellow';
+                        case DECAYING:
+                            return 'grey';
+                        default:
+                            return 'white';
+                    }
+                });
+
+            cells.exit().remove();
+        }
+
+        // Main simulation loop
+        function simulate(iterations) {
+            let count = 0;
+            function step() {
+                if (count < iterations) {
+                    grid = updateGrid(grid);
+                    drawGrid(grid);
+                    count++;
+                    requestAnimationFrame(step);
+                }
+            }
+            step();
+        }
+
+        // Run the simulation
+        simulate(iterations);
+    </script>
+</body>
+</html>
