@@ -12,6 +12,8 @@
   "license": "ISC",
   "dependencies": {
     "canvas": "^2.11.2",
-    "gifencoder": "^2.0.1"
+    "d3": "^7.9.0",
+    "gifencoder": "^2.0.1",
+    "three": "^0.167.1"
   }
 }
