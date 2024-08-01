@@ -13,7 +13,7 @@ const REFRACTORY = 2;
 const INHIBITORY = 3;
 const DEMENTIA_START = 4;
 const DEMENTIA_AFFECTED = 5;
-const PERMANENT_DAMAGE = 6; // New state for permanent damage
+const PERMANENT_DAMAGE = 3; // New state for permanent damage
 
 // Define refractory period for active cells
 const REFRACTORY_PERIOD = 50;
@@ -237,4 +237,4 @@ function simulate(iterations) {
 }
 
 // Run the simulation
-simulate(10000);
+simulate(1000);
