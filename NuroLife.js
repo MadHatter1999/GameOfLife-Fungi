@@ -4,7 +4,7 @@ const fs = require('fs');
 
 // Define the grid size and cell size for visualization
 const gridSize = 200;
-const cellSize = 1;
+const cellSize = 2;
 
 // Define cell states
 const INACTIVE = 0;

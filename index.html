@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neuron Simulation</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .grid {
+            margin: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="grid"></div>
+    <script>
+        // Configuration
+        const gridSize = 200;
+        const cellSize = 4; // Increase for better visibility
+        const iterations = 4000;
+
+        // Define cell states
+        const INACTIVE = 0;
+        const ACTIVE = 1;
+        const REFRACTORY = 2;
+
+        // Activation settings
+        const ACTIVATION_PROBABILITY = 0.2;
+        const DEACTIVATION_PROBABILITY = 0.01;
+        const REFRACTORY_PERIOD = 50;
+        const REFRACTORY_THRESHOLD = 100;
+
+        // NeuronCell class to encapsulate the properties and behaviors of each cell
+        class NeuronCell {
+            constructor(state = INACTIVE, activityLevel = 0, refractoryTime = 0) {
+                this.state = state;
+                this.activityLevel = activityLevel;
+                this.refractoryTime = refractoryTime;
+            }
+
+            update(grid, x, y) {
+                switch (this.state) {
+                    case INACTIVE:
+                        if (Math.random() < ACTIVATION_PROBABILITY) {
+                            this.state = ACTIVE;
+                            this.activityLevel = 0;
+                        }
+                        break;
+                    case ACTIVE:
+                        this.activityLevel++;
+                        if (Math.random() < DEACTIVATION_PROBABILITY || this.activityLevel > REFRACTORY_THRESHOLD) {
+                            this.state = REFRACTORY;
+                            this.refractoryTime = REFRACTORY_PERIOD;
+                        }
+                        break;
+                    case REFRACTORY:
+                        this.refractoryTime--;
+                        if (this.refractoryTime <= 0) {
+                            this.state = INACTIVE;
+                            this.activityLevel = 0;
+                        }
+                        break;
+                }
+            }
+        }
+
+        // Initialize the grid with NeuronCell objects
+        let grid = Array.from({ length: gridSize }, () => Array.from({ length: gridSize }, () => new NeuronCell()));
+
+        // Function to update the grid based on neuronal activity rules
+        function updateGrid(grid) {
+            let newGrid = grid.map(row => row.map(cell => new NeuronCell(cell.state, cell.activityLevel, cell.refractoryTime)));
+
+            for (let x = 0; x < gridSize; x++) {
+                for (let y = 0; y < gridSize; y++) {
+                    newGrid[x][y].update(newGrid, x, y);
+                }
+            }
+
+            return newGrid;
+        }
+
+        // Create an SVG container
+        const svg = d3.select('.grid').append('svg')
+            .attr('width', gridSize * cellSize)
+            .attr('height', gridSize * cellSize);
+
+        // Function to draw the grid using D3.js
+        function drawGrid(grid) {
+            const cells = svg.selectAll('rect').data(grid.flat());
+
+            cells.enter().append('rect')
+                .attr('x', (_, i) => (i % gridSize) * cellSize)
+                .attr('y', (_, i) => Math.floor(i / gridSize) * cellSize)
+                .attr('width', cellSize)
+                .attr('height', cellSize)
+                .merge(cells)
+                .attr('fill', cell => {
+                    switch (cell.state) {
+                        case INACTIVE:
+                            return 'white';
+                        case ACTIVE:
+                            return `blue`;
+                        case REFRACTORY:
+                            return 'grey';
+                        default:
+                            return 'white';
+                    }
+                });
+
+            cells.exit().remove();
+        }
+
+        // Main simulation loop
+        function simulate(iterations) {
+            let count = 0;
+            function step() {
+                if (count < iterations) {
+                    grid = updateGrid(grid);
+                    drawGrid(grid);
+                    count++;
+                    requestAnimationFrame(step);
+                }
+            }
+            step();
+        }
+
+        // Run the simulation
+        simulate(iterations);
+    </script>
+</body>
+</html>

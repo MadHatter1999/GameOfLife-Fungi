@@ -2,18 +2,21 @@
   "name": "funguy",
   "version": "1.0.0",
   "description": "",
-  "main": "fungalLife.js",
+  "main": "NuroLife.js",
+  "type": "module",
   "scripts": {
-    "run": "node fungalLife.js",
+    "start": "node NuroLife.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@enable3d/three-graphics": "^0.25.4",
     "canvas": "^2.11.2",
     "d3": "^7.9.0",
     "gifencoder": "^2.0.1",
-    "three": "^0.167.1"
+    "jsdom": "^24.1.1",
+    "three": "0.156.1"
   }
 }
