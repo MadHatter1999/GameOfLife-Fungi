@@ -1,10 +1,10 @@
 const { createCanvas } = require('canvas');
-const GIFEncoder = require('gifencoder');
-const fs = require('fs');
+const express = require('express');
+const path = require('path');
 
 // Define the grid size and cell size for visualization
-const gridSize = 200;
-const cellSize = 4;
+const gridSize = 400;
+const cellSize = 1;
 
 // Define cell states
 const EMPTY = 0;
@@ -67,15 +67,14 @@ class FungusCell {
     }
 
     spread(grid, x, y, spreadFactor) {
-        let directions = [
+        const directions = [
             [0, 1], [1, 0], [0, -1], [-1, 0],
             [-1, -1], [-1, 1], [1, -1], [1, 1],
         ];
         for (let i = 0; i < spreadFactor; i++) {
-            let direction = directions[Math.floor(Math.random() * directions.length)];
-            let [dx, dy] = direction;
-            let nx = (x + dx + gridSize) % gridSize;
-            let ny = (y + dy + gridSize) % gridSize;
+            const [dx, dy] = directions[Math.floor(Math.random() * directions.length)];
+            const nx = (x + dx + gridSize) % gridSize;
+            const ny = (y + dy + gridSize) % gridSize;
             if (grid[nx][ny].state === EMPTY) {
                 grid[nx][ny] = new FungusCell(TIP, 0, 0, this.strain);
             }
@@ -83,46 +82,57 @@ class FungusCell {
     }
 
     countNeighbors(grid, x, y) {
-        let directions = [
+        const directions = [
             [0, 1], [1, 0], [0, -1], [-1, 0],
             [-1, -1], [-1, 1], [1, -1], [1, 1],
         ];
-        return directions.reduce((count, [dx, dy]) => {
-            let nx = (x + dx + gridSize) % gridSize;
-            let ny = (y + dy + gridSize) % gridSize;
-            return count + (grid[nx][ny].state === HYPHAE ? 1 : 0);
-        }, 0);
+        let count = 0;
+        for (const [dx, dy] of directions) {
+            const nx = (x + dx + gridSize) % gridSize;
+            const ny = (y + dy + gridSize) % gridSize;
+            if (grid[nx][ny].state === HYPHAE) {
+                count++;
+            }
+        }
+        return count;
     }
 }
 
-// Initialize the grid with FungusCell objects
-let grid = Array.from({ length: gridSize }, () => Array.from({ length: gridSize }, () => new FungusCell()));
+// Function to initialize the grid with FungusCell objects
+function initializeGrid() {
+    const newGrid = Array.from({ length: gridSize }, () => Array.from({ length: gridSize }, () => new FungusCell()));
+    
+    // Initialize with some spores for two strains
+    const initialSpores = [
+        { x: Math.floor(gridSize / 4), y: Math.floor(gridSize / 4), strain: 'Penicillium' },
+        { x: Math.floor(3 * gridSize / 4), y: Math.floor(3 * gridSize / 4), strain: 'Aspergillus' },
+    ];
 
-// Initialize with some spores for two strains
-const initialSpores = [
-    { x: Math.floor(gridSize / 4), y: Math.floor(gridSize / 4), strain: 'Penicillium' },
-    { x: Math.floor(3 * gridSize / 4), y: Math.floor(3 * gridSize / 4), strain: 'Aspergillus' },
-];
-
-initialSpores.forEach(({ x, y, strain }) => {
-    grid[x][y] = new FungusCell(SPORE, 0, 0, strain);
-});
-
-// Function to update the grid based on fungal growth and decay rules
-function updateGrid(grid) {
-    let newGrid = grid.map(row => row.map(cell => new FungusCell(cell.state, cell.age, cell.decayTime, cell.strain)));
-
-    for (let x = 0; x < gridSize; x++) {
-        for (let y = 0; y < gridSize; y++) {
-            newGrid[x][y].update(newGrid, x, y);
-        }
-    }
+    initialSpores.forEach(({ x, y, strain }) => {
+        newGrid[x][y] = new FungusCell(SPORE, 0, 0, strain);
+    });
 
     return newGrid;
 }
 
+// Initialize the grid
+let grid = initializeGrid();
+
+// Function to update the grid based on fungal growth and decay rules
+function updateGrid(grid) {
+    for (let x = 0; x < gridSize; x++) {
+        for (let y = 0; y < gridSize; y++) {
+            grid[x][y].update(grid, x, y);
+        }
+    }
+}
+
 // Function to draw the grid on a canvas
-function drawGrid(grid, ctx) {
+function drawGrid(grid, ctx, offsetX, offsetY, scale) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
     for (let x = 0; x < gridSize; x++) {
         for (let y = 0; y < gridSize; y++) {
             switch (grid[x][y].state) {
@@ -145,31 +155,84 @@ function drawGrid(grid, ctx) {
             ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
         }
     }
+    ctx.restore();
 }
 
 // Create a canvas and context
 const canvas = createCanvas(gridSize * cellSize, gridSize * cellSize);
 const ctx = canvas.getContext('2d');
 
-// Create a GIF encoder
-const encoder = new GIFEncoder(gridSize * cellSize, gridSize * cellSize);
-encoder.createReadStream().pipe(fs.createWriteStream('fungal-life-competing-strains.gif'));
-encoder.start();
-encoder.setRepeat(0); // 0 for repeat, -1 for no-repeat
-encoder.setDelay(100); // frame delay in ms
-encoder.setQuality(10); // image quality. 10 is default
+// Setup Express server
+const app = express();
+const port = 3000;
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/current-frame', (req, res) => {
+    const { offsetX = 0, offsetY = 0, scale = 1 } = req.query;
+    drawGrid(grid, ctx, parseFloat(offsetX), parseFloat(offsetY), parseFloat(scale));
+    res.setHeader('Content-Type', 'image/png');
+    res.send(canvas.toBuffer());
+});
+
+app.get('/start-simulation', (req, res) => {
+    running = true;
+    currentIteration = 0; // Reset iteration counter
+    preloadFrames(50).then(() => {
+        simulate();
+        res.sendStatus(200);
+    });
+});
+
+app.get('/pause-simulation', (req, res) => {
+    running = false;
+    res.sendStatus(200);
+});
+
+app.get('/reset-simulation', (req, res) => {
+    running = false;
+    grid = initializeGrid(); // Reset grid
+    currentIteration = 0; // Reset iteration counter
+    res.sendStatus(200);
+});
+
+app.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
+});
 
 // Main simulation loop
-function simulate(iterations) {
-    for (let i = 0; i < iterations; i++) {
-        console.log('Current Cycle:', i);
-        grid = updateGrid(grid);
-        drawGrid(grid, ctx);
-        encoder.addFrame(ctx);
-    }
-    encoder.finish();
-    console.log('The GIF file was created.');
+let currentIteration = 0;
+let running = false;
+
+function preloadFrames(count) {
+    return new Promise((resolve) => {
+        const preloadLoop = () => {
+            if (count > 0) {
+                updateGrid(grid);
+                currentIteration++;
+                count--;
+                setTimeout(preloadLoop, 0); // Use a timeout to avoid blocking the event loop
+            } else {
+                resolve();
+            }
+        };
+        preloadLoop();
+    });
 }
 
-// Run the simulation
-simulate(500);
+function simulate() {
+    if (running) {
+        updateGrid(grid);
+        currentIteration++;
+        setTimeout(simulate, 16); // Approximate 60 FPS
+    }
+}
+
+function startSimulation() {
+    running = true;
+    simulate();
+}
+
+function pauseSimulation() {
+    running = false;
+}
